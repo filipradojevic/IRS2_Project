@@ -1,0 +1,33 @@
+17:17:44 **** Incremental Build of configuration Debug for project Bridge_connection ****
+make -j16 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32L476xx -c -I../Core/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -I../Core/Src -I..//Core/Src -I..//Core/Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'HAL_ADC_ConvCpltCallback':
+../Core/Src/main.c:274:9: warning: implicit declaration of function 'sprintf' [-Wimplicit-function-declaration]
+  274 |         sprintf(temp_str, "Temp: %d C", value.temperature); // @suppress("Float formatting support")
+      |         ^~~~~~~
+../Core/Src/main.c:32:1: note: include '<stdio.h>' or provide a declaration of 'sprintf'
+   31 | #include <string.h>
+  +++ |+#include <stdio.h>
+   32 | 
+../Core/Src/main.c:274:9: warning: incompatible implicit declaration of built-in function 'sprintf' [-Wbuiltin-declaration-mismatch]
+  274 |         sprintf(temp_str, "Temp: %d C", value.temperature); // @suppress("Float formatting support")
+      |         ^~~~~~~
+../Core/Src/main.c:274:9: note: include '<stdio.h>' or provide a declaration of 'sprintf'
+../Core/Src/main.c: In function 'Error_Handler':
+../Core/Src/main.c:361:12: warning: suggest parentheses around assignment used as truth value [-Wparentheses]
+  361 |   else if (uart_error_status = UART4_ERROR || logging == LOGGING_ERROR){
+      |            ^~~~~~~~~~~~~~~~~
+arm-none-eabi-gcc -o "Bridge_connection.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\frado\Desktop\IRS2_2024-2025\Nucleo_L4\STM32CubeL4-master\Bridge_connection\STM32L476RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Bridge_connection.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: Bridge_connection.elf
+ 
+arm-none-eabi-size  Bridge_connection.elf 
+arm-none-eabi-objdump -h -S Bridge_connection.elf  > "Bridge_connection.list"
+   text	   data	    bss	    dec	    hex	filename
+  36528	     92	   3572	  40192	   9d00	Bridge_connection.elf
+Finished building: default.size.stdout
+ 
+Finished building: Bridge_connection.list
+ 
+
+17:17:45 Build Finished. 0 errors, 3 warnings. (took 853ms)
+
