@@ -1,0 +1,439 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2024 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "adc.h"
+#include "i2c.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "ssd1306.h"
+#include "ssd1306_tests.h"
+#include "ssd1306_fonts.h"
+#include <string.h>
+#include "7seg.h"
+
+/* USER CODE END Includes */
+
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+#define UART_BUFFER_LENGTH 10
+#define UART_EXPECT_DATA_SIZE 1
+#define LED2_KIT_PORT GPIOB
+#define LED2_KIT_PIN GPIO_PIN_15
+#define LED1_KIT_PORT GPIOA
+#define LED1_KIT_PIN GPIO_PIN_11
+#define LED_UC_PORT GPIOA
+#define LED_UC_PIN GPIO_PIN_5
+#define BUTTON_PORT GPIOC
+#define BUTTON_PIN GPIO_PIN_13
+#define ADC_PIN GPIO_PIN_4
+
+/* USER CODE END PD */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+typedef enum
+{
+  NO_ERROR = 0,
+  USART2_ERROR,
+  USART3_ERROR,
+  USART3_USART4_HUART_ERROR,
+  UART4_ERROR
+} Status_Uart_t;
+
+typedef enum
+{
+	NO_LOGGING_ERROR = 0,
+	LOGGING_ERROR = 1
+} Status_Logging_t;
+
+
+typedef struct {
+    uint8_t rx_buffer[UART_BUFFER_LENGTH];
+    uint8_t tx_buffer[UART_BUFFER_LENGTH];
+} UART_Data_t;
+
+typedef struct{
+	uint16_t temperature;
+} ADC_Value_Temperature_t;
+
+typedef struct{
+	uint8_t first_digit;
+	uint8_t second_digit;
+	uint8_t number_7seg_display;
+}Seven_Seg_Display_t;
+
+/* USER CODE END PTD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+
+HAL_StatusTypeDef UART2_CHECK;
+HAL_StatusTypeDef UART3_CHECK;
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+UART_Data_t uart2_data;
+UART_Data_t uart3_data;
+UART_Data_t uart4_data;
+Status_Uart_t uart_error_status = NO_ERROR;
+Status_Logging_t logging = NO_LOGGING_ERROR;
+HAL_StatusTypeDef moj_status;
+Seven_Seg_Display_t seven_seg_display.number_7seg_display = 23;
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+Status_Logging_t Login_Write(const char* message) {
+    /*  We will send via UART4 for logging messages  */
+    moj_status = HAL_UART_Transmit(&huart4, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+
+    return logging;
+}
+
+void HAL_DisplayNumber(uint8_t number) {
+    Status_7seg_Display_t current_display = DISPLAY1_7SEG;
+    uint8_t first_digit     = number / 10;
+    uint8_t second_digit    = number % 10;
+    for(;;){
+		switch (current_display) {
+			case DISPLAY1_7SEG:
+				// Aktiviramo prvi displej (mux1 = 0, mux2 = 1)
+				HAL_GPIO_WritePin(MUX1_PORT, MUX1_PIN, GPIO_PIN_RESET);  // Display 1 ON
+				HAL_GPIO_WritePin(MUX2_PORT, MUX2_PIN, GPIO_PIN_SET);    // Display 2 OFF
+
+				// Izdvajamo prvu cifru (10s pozicija)
+				first_digit = number / 10;  // Prva cifra
+				HAL_7SEGWriteDigit(first_digit);
+
+				// Prebacujemo na sledeći displej
+				current_display = DISPLAY2_7SEG;
+				break;
+
+			case DISPLAY2_7SEG:
+				// Aktiviramo drugi displej (mux1 = 1, mux2 = 0)
+				HAL_GPIO_WritePin(MUX1_PORT, MUX1_PIN, GPIO_PIN_SET);    // Display 1 OFF
+				HAL_GPIO_WritePin(MUX2_PORT, MUX2_PIN, GPIO_PIN_RESET);  // Display 2 ON
+
+				// Izdvajamo drugu cifru (1s pozicija)
+				second_digit = number % 10;  // Druga cifra
+				HAL_7SEGWriteDigit(second_digit);
+
+				// Prebacujemo na prvi displej
+				current_display = DISPLAY1_7SEG;
+				break;
+			case UNDEFINED_7SEG:
+				Login_Write("Error in 7seg display! \r\n");
+				Error_Handler();
+				break;
+		}
+		HAL_Delay(5);  // Kašnjenje za multipleksiranje (5ms)
+    }
+}
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
+  MX_ADC1_Init();
+  MX_I2C2_Init();
+  MX_UART4_Init();
+  /* USER CODE BEGIN 2 */
+
+  	/* Enaibling OLED */
+	if (ssd1306_Init()!= INITIALIZED_OLED_INIT_SUCCESSFULLY){
+		Login_Write("Unaible to initialize ssd1306 Init! \r\n");
+		Error_Handler();
+	}
+	else{
+		Login_Write("Successfully initialized ssd1306 Init! \r\n");
+	}
+
+	/*  Enabling communications  */
+	if (HAL_UART_Receive_IT(&huart2, uart2_data.rx_buffer, UART_EXPECT_DATA_SIZE) != HAL_OK){
+		Login_Write("Unaible to start UART2 receive IT MODE! \r\n");
+		Error_Handler();
+	}
+	else{
+		Login_Write("Successfully started UART2 receive IT MODE! \r\n");
+	}
+	if(HAL_UART_Receive_IT(&huart3, uart3_data.rx_buffer, UART_EXPECT_DATA_SIZE) != HAL_OK){
+		Login_Write("Unaible to start UART3 receive IT MODE! \r\n");
+		Error_Handler();
+	}
+	else{
+		Login_Write("Successfully started UART3 receive IT MODE! \r\n");
+	}
+
+  HAL_UART_Receive_IT(&huart2, uart2_data.rx_buffer, UART_EXPECT_DATA_SIZE);
+  HAL_UART_Receive_IT(&huart3, uart3_data.rx_buffer, UART_EXPECT_DATA_SIZE);
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+	HAL_DisplayNumber(number_7seg_display);
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = 0;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 40;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+
+    if(GPIO_Pin == BUTTON_PIN) {
+    	/* Inicijalizacija ADC-a */
+    	if (HAL_ADC_Start_IT(&hadc1) != HAL_OK){ // Starts ADC -> we will catch the complete
+    		Error_Handler();
+    	}
+    }
+    else{
+    	Login_Write("Not expected another interrupt only PC13! \r\n");
+    }
+}
+
+/*  This function will get the temp value and send on display via I2C  */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        		/*  Catching the adc_value  */
+    	uint32_t adc_value = HAL_ADC_GetValue(hadc);
+    	ADC_Value_Temperature_t value;
+    	value.temperature = (adc_value * 3.3 / 4095) * 100; // Example for a temperature sensor
+    	char temp_str[20];
+    	sprintf(temp_str, "Temp: %d C", value.temperature); // @suppress("Float formatting support")
+    	//ssd1306_Clear();
+    	if (ssd1306_SetCursor(0,0)!= INITIALIZED_OLED_CURSOR_SUCCESSFULLY){
+    		Login_Write("Unaible to initialize ssd1306 SetCursor! \r\n");
+    		Error_Handler();
+    	}
+    	else{
+    		Login_Write("Successfully initialized ssd1306 SetCursor! \r\n");
+    	}
+
+    	char result = ssd1306_WriteString(temp_str, Font_7x10, White);
+    	if (result == '\0') {
+    	    Login_Write("Successfully initialized ssd1306 WriteString!\r\n");
+    	}
+    	else {
+    	    Login_Write("Unable to initialize ssd1306 WriteString!\r\n");
+    	    Error_Handler();
+    	}
+    	if (ssd1306_UpdateScreen()!= INITIALIZED_OLED_UPDATE_SCREEN_SUCCESSFULLY){
+    		Login_Write("Unaible to initialize ssd1306 UpdateScreen! \r\n");
+    		Error_Handler();
+    	}
+    	else{
+    		Login_Write("Successfully initialized ssd1306 UpdateScreen! \r\n");
+    	}
+
+
+    }
+    else{
+    	Login_Write("Not hadc->Instance == ADC1! \r\n");
+    	Error_Handler();
+    }
+}
+
+
+
+
+	/* This is a bridge communication between HOST -> uC -> ESP8226 module */
+					/*  This is for internet communication  */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	if(huart->Instance == USART2){
+		uart3_data.tx_buffer[0] = uart2_data.rx_buffer[0];
+		HAL_UART_Receive_IT(&huart2, uart2_data.rx_buffer, 1);
+		HAL_UART_AbortTransmit_IT(&huart3);
+		HAL_UART_Transmit_IT(&huart3, uart3_data.tx_buffer, 1);
+	}
+	else if(huart->Instance == USART3){
+		uart2_data.tx_buffer[0] = uart3_data.rx_buffer[0];
+		HAL_UART_Receive_IT(&huart3, uart3_data.rx_buffer, 1);
+		HAL_UART_AbortTransmit_IT(&huart2);
+		HAL_UART_Transmit_IT(&huart2, uart2_data.tx_buffer, 1);
+	}
+
+}
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+
+
+  if (uart_error_status == USART3_ERROR) {
+	  for (;;){
+		  /* Led1->uC will be set if USART3 fails with sending or receiving */
+		  HAL_GPIO_WritePin(LED_UC_PORT, LED_UC_PIN, GPIO_PIN_SET);
+		  HAL_Delay(200);
+	  }
+  }
+  else if (uart_error_status == USART2_ERROR){
+	  for (;;){
+		  /* Led2->kit will be set if USART2 fails with sending or receiving */
+		  HAL_GPIO_WritePin(LED2_KIT_PORT, LED2_KIT_PIN, GPIO_PIN_SET);
+		  HAL_Delay(200);
+	  }
+  }
+  else if (uart_error_status == USART3_USART4_HUART_ERROR){
+	  Login_Write("Error: Interrupt instance conflict detected for USART3 and USART4!\r\n");
+	  HAL_Delay(0xFFFFFFFF);
+  }
+
+  else if (uart_error_status = UART4_ERROR || logging == LOGGING_ERROR){
+	  for(;;){
+		  HAL_GPIO_TogglePin(LED1_KIT_PORT, LED1_KIT_PIN);
+		  HAL_Delay(200);
+	  }
+  }
+
+  else {
+	  /*All other errors check call->stack for debbug error*/
+	  for (;;);
+  }
+
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */

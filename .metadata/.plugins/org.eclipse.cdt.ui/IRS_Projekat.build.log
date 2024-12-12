@@ -1,0 +1,10 @@
+14:10:37 **** Incremental Build of configuration Debug for project IRS_Projekat ****
+make -j16 all 
+arm-none-eabi-size  IRS_Projekat.elf 
+   text	   data	    bss	    dec	    hex	filename
+  37772	     92	   3620	  41484	   a20c	IRS_Projekat.elf
+Finished building: default.size.stdout
+ 
+
+14:10:38 Build Finished. 0 errors, 0 warnings. (took 255ms)
+
